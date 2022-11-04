@@ -23,6 +23,8 @@ usersvar = StringVar()
 userbox = Listbox(c, listvariable=usersvar)
 userbox.grid(row=2, column=1, padx=(0, 10), sticky='nsw')
 
+BS.usersvar = usersvar
+
 def onselect(evt):
     # Note here that Tkinter passes an event object to onselect()
     w = evt.widget
@@ -80,7 +82,7 @@ def show_connection_dialog():
 			if ret is None:  # happy path
 				connection_status_var.set(f'Connected! Token: {BS.token}')
 				connection_button_var.set('Disconnect')
-				update_users()
+				# update_users()
 			else:
 				connection_status_var.set(f'Error! {ret}')
 		else:  

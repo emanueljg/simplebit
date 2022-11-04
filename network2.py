@@ -9,21 +9,37 @@ import requests
 import time
 from threading import Thread
 from sseclient import SSEClient
+from collections import defaultdict
 import re
 
 
 class Session:
     SERVER_URL = 'https://sse.nodehill.com'
 
-    def __init__(self, channel, user, handler):
+    def __init__(self, channel, user):
         self.channel = channel
         self.user = user
-        self.message_handler = handler
 
         self.close_it = False
         self.token = None
         self.last_message_time = 0
         self.last_exception = None
+        self._message_handlers = defaultdict(defaultdict(list))
+
+    def handler(self, timestamp, user, message):
+        for pattern, priority_dict in self._message_handlers.items():
+            if (m := pattern.match(message)):
+                for _, funcs in sorted(priority_dict.items()):
+                    for func in funcs:
+                        func(m, timestamp, user, message)
+
+    def on_message_pattern(self, pattern, priority=10):
+        def inner_on_message_pattern(f):
+            self._message_handlers[pattern][priority].append(f)
+            def wrapped(m, timestamp, user, message):
+                return f(m, timestamp, user, message)
+            return wrapped
+        return inner_on_message_pattern
 
     def on_token(self, e):
         self.token = json.loads(e.data)
@@ -37,9 +53,9 @@ class Session:
             self.last_message_time = timestamp
             user = d['user']
             message = d['data']
-            self.message_handler(timestamp, user, message)
+            self.handler(timestamp, user, message)
         except Exception as e:
-            # this is just the keepalive ping wrongly treated as a message
+            # this is what I assume is just the keepalive ping wrongly treated as a message
             if str(e) != 'Expecting value: line 1 column 1 (char 0)':
                 raise e
 
@@ -66,6 +82,7 @@ class Session:
                 elif msg.event == 'error':
                     self.on_error(msg)
         except Exception as e:
+            print(e)
             self.last_exception = e
 
     def connect(self):
@@ -74,10 +91,9 @@ class Session:
         while not self.last_exception and not self.token:
             time.sleep(1)
 
+        # pick up other threada exception if it occured
         if (tmp := self.last_exception) is not None:
-            print(tmp)
             self.last_exception = None
-            print(tmp)
             return tmp
 
     def send(self, message):
@@ -111,44 +127,37 @@ class SimplebitSession(Session):
     USER_PATTERN_PART = r'([\w\d]+)'
     JOIN_PATTERN = re.compile(fr"""^User {USER_PATTERN_PART} joined channel (?:'|")(.+)(?:'|").$""")
     LEAVE_PATTERN = re.compile(fr"""^User (?:'|"){USER_PATTERN_PART}(?:'|") left channel (?:'|")(.+)(?:'|").$""")
-    REQUEST_PROVIDE_DIR_PATTERN = re.compile(fr'REQUEST {USER_PATTERN_PART} PROVIDE_DIR')
-    REQUEST_PROVIDE_DIR_PATTERN = re.compile(fr'GIVE {USER_PATTERN_PART} PROVIDE_DIR')
-
-
-    #PATTERNS = [USER_PATTERN, JOIN_PATTERN, LEAVE_PATTERN, REQUEST_PROVIDE_DIR_PATTERN]
+    REQUEST_PROVIDE_DIR_PATTERN = re.compile(fr'^REQUEST {USER_PATTERN_PART} PROVIDE_DIR$')
+    GIVE_PROVIDE_DIR_PATTERN = re.compile(fr'^GIVE {USER_PATTERN_PART} PROVIDE_DIR (.+)$')
 
     def __init__(self, channel, user):
-        self.channel = 'SIMPLEBIT_' + channel
-        self.user = user
-        self.handler = self.sb_handler
-        super().__init__(self.channel, self.user, self.sb_handler)
+        super().__init__(channel, user)
 
-        self.peer_model = {}
         self.users = []
         self.provide_dir = 'foo'
-        self.receive_dir = 'bar'
 
+        self.usersvar = None
 
-    def sb_handler(self, timestamp, user, message):
-        if (m := self.JOIN_PATTERN.match(message)):
-            self.add_user(m.group(1))
-        elif (m := self.LEAVE_PATTERN.match(message)):
-            self.remove_user(m.group(1))
-        elif (m := self.REQUEST_PROVIDE_DIR_PATTERN.match(message)):
-            self.send_give_provide_dir(m.group(1))
-        elif (m := self.GIVE_PROVIDE_DIR_PATTERN.match(message)):
-            self.send_give_provide_dir(m.group(1))
+    @Session.on_message_pattern(JOIN_PATTERN)
+    def add_user(self, m, timestamp, user, message):
+        self.users.append(m.group(1))
 
-    def add_user(self, user):
-        if user != self.user: 
-            self.users.append(user)
+    @on_message_pattern(LEAVE_PATTERN)
+    def remove_user(self, m, timestamp, user, message):
+        self.users.remove(m.group(1))
 
-    def remove_user(self, user):
-        if user != self.user:
-            self.users.remove(user)
+    @on_message_pattern(JOIN_PATTERN, priority=11)
+    @on_message_pattern(LEAVE_PATTERN, priority=11)
+    def gui_update_users(self, m, timestamp, user, message):
+        self.usersvar.set(self.users)
 
-    def send_request_provide_dir(self, someone):
-        send(f'REQUEST {someone} PROVIDE_DIR')
+    @on_message_pattern(REQUEST_PROVIDE_DIR_PATTERN)
+    def send_request_provide_dir(self, m, timestamp, user, message):
+        if m.group(1) == self.user:
+            send(f'GIVE {user} PROVIDE_DIR {self.provide_dir}')
 
-    def send_give_provide_dir(self, someone):
-        send(f'GIVE {someone} PROVIDE_DIR {self.provide_dir}')
+    @on_message_pattern(GIVE_PROVIDE_DIR_PATTERN)
+    def send_give_provide_dir(self, m, timestamp, user, message):
+        if m.group(1) == self.user:
+            # TODO
+            print(m.group(2))
