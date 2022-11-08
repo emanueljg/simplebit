@@ -1,8 +1,12 @@
 # SSE system for direct messaging
 # [sends messages via sse.nodehill.com]
-# ----Alternative context-manager based version!---- 
+# ----Alternative class-based version!---- 
 
 
+import os
+import base64
+from os import listdir
+from os.path import isfile, join
 import json
 import urllib.parse
 import requests
@@ -13,7 +17,32 @@ from collections import defaultdict
 import re
 
 
-class Session:
+def get_file_files(dir_path):
+    return [f for f in listdir(dir_path) if isfile(join(dir_path, f))]
+
+def ms_since_epoch():
+    return time.time_ns() // 1000000
+
+# evil metaclass hack that injects decorator functionality
+class HookRegistrar(type):
+    # use lambda to make a defaultdict of defaultdict values 
+    # since defaultdict requires a callable
+    hooks = defaultdict(lambda: defaultdict(list))  
+
+    @classmethod
+    def __prepare__(metacls, name, bases):
+        def hook(pattern, priority=10):
+            def inner_hook(f):
+                HookRegistrar.hooks[pattern][priority].append(f)
+                def wrapped(*args, **kwargs):
+                    return f(*args, **kwargs)
+                return wrapped
+            return inner_hook
+        
+        return {'hook': hook, 'hooks': HookRegistrar.hooks}
+
+
+class Session(metaclass=HookRegistrar):
     SERVER_URL = 'https://sse.nodehill.com'
 
     def __init__(self, channel, user):
@@ -24,22 +53,23 @@ class Session:
         self.token = None
         self.last_message_time = 0
         self.last_exception = None
-        self._message_handlers = defaultdict(defaultdict(list))
+        self.last_connected_at = None
 
     def handler(self, timestamp, user, message):
-        for pattern, priority_dict in self._message_handlers.items():
-            if (m := pattern.match(message)):
-                for _, funcs in sorted(priority_dict.items()):
-                    for func in funcs:
-                        func(m, timestamp, user, message)
-
-    def on_message_pattern(self, pattern, priority=10):
-        def inner_on_message_pattern(f):
-            self._message_handlers[pattern][priority].append(f)
-            def wrapped(m, timestamp, user, message):
-                return f(m, timestamp, user, message)
-            return wrapped
-        return inner_on_message_pattern
+        print('---')
+        print(self.last_connected_at)
+        print(timestamp)
+        print(message)
+        
+        assert self.last_connected_at is not None
+        #if True:
+        if timestamp > self.last_connected_at:
+            for pattern, priority_dict in self.hooks.items():
+                if (m := pattern.match(message)):
+                    for _, funcs in sorted(priority_dict.items()):
+                        for func in funcs:
+                            print(m.groups)
+                            func(self, m, timestamp, user, message)
 
     def on_token(self, e):
         self.token = json.loads(e.data)
@@ -69,6 +99,7 @@ class Session:
             user_name = urllib.parse.quote(self.user)
             client = SSEClient(f'{self.SERVER_URL}/api/listen/{channel_name}/' +
                                f'{user_name}/{self.last_message_time}')
+            print(self.last_connected_at is None)
             for msg in client:
                 if self.close_it:
                     client.resp.close()
@@ -91,10 +122,10 @@ class Session:
         while not self.last_exception and not self.token:
             time.sleep(1)
 
-        # pick up other threada exception if it occured
         if (tmp := self.last_exception) is not None:
             self.last_exception = None
-            return tmp
+            return tmp     
+
 
     def send(self, message):
         try:
@@ -113,7 +144,15 @@ class Session:
         self.send('Bye!')
 
         while self.token:
-            time.sleep(1)
+            time.sleep(0.01)
+
+        self.last_connected_at = None
+
+        self.user_files = {}
+        self.update_users()
+        self.current_selected_user = None
+        self.filesvar.set([])
+
 
     def __enter__(self):
         self.connect()
@@ -129,35 +168,101 @@ class SimplebitSession(Session):
     LEAVE_PATTERN = re.compile(fr"""^User (?:'|"){USER_PATTERN_PART}(?:'|") left channel (?:'|")(.+)(?:'|").$""")
     REQUEST_PROVIDE_DIR_PATTERN = re.compile(fr'^REQUEST {USER_PATTERN_PART} PROVIDE_DIR$')
     GIVE_PROVIDE_DIR_PATTERN = re.compile(fr'^GIVE {USER_PATTERN_PART} PROVIDE_DIR (.+)$')
+    PING_ALL_PATTERN = re.compile(fr'^PING_ALL$')
+    PONG_PATTERN = re.compile(fr'^PONG {USER_PATTERN_PART}$')
+    REQUEST_FILES_LIST_PATTERN = re.compile(fr'^REQUEST_FILES_LIST {USER_PATTERN_PART}$')
+    GIVE_FILES_LIST_PATTERN = re.compile(fr'^GIVE_FILES_LIST {USER_PATTERN_PART} (.+)$')
+    REQUEST_FILE_PATTERN = re.compile(fr'^REQUEST_FILE {USER_PATTERN_PART} (.+)$')
+    GIVE_FILE_PATTERN = re.compile(fr'^GIVE_FILE {USER_PATTERN_PART} (.+) (.+)$')
 
     def __init__(self, channel, user):
         super().__init__(channel, user)
 
-        self.users = []
-        self.provide_dir = 'foo'
+
+        self.user_files = {}
+        
+        self.provide_dir = '.'
+        self.receive_dir = '.'
 
         self.usersvar = None
+        self.filesvar = None
 
-    @Session.on_message_pattern(JOIN_PATTERN)
-    def add_user(self, m, timestamp, user, message):
-        self.users.append(m.group(1))
+        self.current_selected_user = None
 
-    @on_message_pattern(LEAVE_PATTERN)
+    @property
+    def files(self):
+        return get_file_files(self.provide_dir)
+
+    def on_token(self, e):
+        super().on_token(e)
+        if self.last_connected_at is None: 
+            self.last_connected_at = ms_since_epoch()
+            self.send_ping_all()
+
+    def send_ping_all(self):
+        self.send('PING_ALL')
+
+    def update_users(self):
+        self.usersvar.set(list(self.user_files.keys()))
+
+    def update_files(self, user):
+        self.current_selected_user = user
+        self.filesvar.set(self.user_files.get(user, []))
+
+    @hook(PING_ALL_PATTERN)
+    def pong(self, m, timestamp, user, message):
+        if user != self.user:
+            self.user_files[user] = []
+            self.update_users()
+            self.send(f'PONG {user}')
+
+    @hook(PONG_PATTERN)
+    def register_pongs(self, m, timestamp, user, message):
+        if m.group(1) == self.user:
+            self.user_files[user] = []
+            self.update_users()
+
+    @hook(LEAVE_PATTERN)
     def remove_user(self, m, timestamp, user, message):
-        self.users.remove(m.group(1))
+        del self.user_files[m.group(1)]
+        self.update_users()
+        if self.current_selected_user not in self.user_files:
+            self.filesvar.set([])
 
-    @on_message_pattern(JOIN_PATTERN, priority=11)
-    @on_message_pattern(LEAVE_PATTERN, priority=11)
-    def gui_update_users(self, m, timestamp, user, message):
-        self.usersvar.set(self.users)
+    def send_request_files_list(self, user):
+        self.send(f'REQUEST_FILES_LIST {user}')
 
-    @on_message_pattern(REQUEST_PROVIDE_DIR_PATTERN)
-    def send_request_provide_dir(self, m, timestamp, user, message):
+    @hook(REQUEST_FILES_LIST_PATTERN)
+    def send_give_files_list(self, m, timestamp, user, message):
         if m.group(1) == self.user:
-            send(f'GIVE {user} PROVIDE_DIR {self.provide_dir}')
+            self.send(f'GIVE_FILES_LIST {user} {json.dumps(self.files)}')
 
-    @on_message_pattern(GIVE_PROVIDE_DIR_PATTERN)
-    def send_give_provide_dir(self, m, timestamp, user, message):
+    @hook(GIVE_FILES_LIST_PATTERN)
+    def accept_files_list(self, m, timestamp, user, message):
         if m.group(1) == self.user:
-            # TODO
-            print(m.group(2))
+            self.user_files[user] = json.loads(m.group(2))
+            print(self.user_files[user])
+            print(self.filesvar)
+            self.update_files(user)
+
+    def send_request_file(self, user, file):
+        self.send(f'REQUEST_FILE {user} {file}')
+
+    @hook(REQUEST_FILE_PATTERN)
+    def send_give_file(self, m, timestamp, user, message):
+        if m.group(1) == self.user:
+            file_name = m.group(2)
+            file_path = os.path.join(self.provide_dir, file_name)
+            file_string = 'DATA_UNSET'  # default to unhappy path
+            with open(file_path, 'rb') as f:
+                file_string = base64.b64encode(f.read()).decode('ascii')
+            self.send(f'GIVE_FILE {user} {file_name} {file_string}')
+
+    @hook(GIVE_FILE_PATTERN)
+    def accept_file(self, m, timestamp, user, message):
+        if m.group(1) == self.user:
+            file_name = 'SB_' + m.group(2)
+            file_path = os.path.join(self.receive_dir, file_name)
+            data = m.group(3)
+            with open(file_path, 'wb') as f:
+                f.write(base64.b64decode(data))
