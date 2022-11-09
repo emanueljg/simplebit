@@ -1,7 +1,7 @@
 from tkinter import *
 from tkinter import ttk
 from tkinter import filedialog
-from network2 import SimplebitSession
+from network import SimplebitSession
 
 
 BS = SimplebitSession('', '')
