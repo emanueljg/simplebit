@@ -65,8 +65,8 @@ usernamevar = StringVar()
 connection_status_var = StringVar(value='Not connected.')
 connection_button_var = StringVar(value='Connect')
 
-provide_dir_var = StringVar()
-receive_dir_var = StringVar()
+provide_dir_var = StringVar(value=BS.provide_dir)
+receive_dir_var = StringVar(value=BS.receive_dir)
 
 def update_users():
     usersvar.set(BS.users)
@@ -124,12 +124,18 @@ def show_connection_dialog():
 def show_settings_dialog():
     def choose_provide_dir():
         provide_dir_var.set(filedialog.askdirectory())
-        BS.provide_dir = provide_dir_var.get()
 
     def choose_receive_dir():
         receive_dir_var.set(filedialog.askdirectory())
 
+    def save_settings():
+        BS.provide_dir = provide_dir_var.get()
+        BS.receive_dir = receive_dir_var.get()
+        BS.save_settings()
+
     def dismiss():
+        provide_dir_var.set(BS.provide_dir)
+        receive_dir_var.set(BS.receive_dir)
         dlg.grab_release()
         dlg.destroy()
 
@@ -146,7 +152,7 @@ def show_settings_dialog():
     receive_dir_btn = ttk.Button(dlg, text='Choose', command=choose_receive_dir)
     receive_dir_entry = ttk.Entry(dlg, textvariable=receive_dir_var)
 
-    apply_btn = ttk.Button(dlg, text='Apply')
+    apply_btn = ttk.Button(dlg, text='Apply', command=save_settings)
     cancel_btn = ttk.Button(dlg, text='Close', command=dismiss)
 
 

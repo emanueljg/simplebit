@@ -7,6 +7,7 @@ import os
 import base64
 from os import listdir
 from os.path import isfile, join
+import yaml
 import json
 import urllib.parse
 import requests
@@ -18,7 +19,8 @@ import re
 
 
 def get_file_files(dir_path):
-    return [f for f in listdir(dir_path) if isfile(join(dir_path, f))]
+    return [f for f in listdir(dir_path) if isfile(join(dir_path, f))] \
+           if dir_path != '' else []
 
 def ms_since_epoch():
     return time.time_ns() // 1000000
@@ -161,7 +163,6 @@ class Session(metaclass=HookRegistrar):
     def __exit__(self, type, value, traceback):
         self.close()
 
-
 class SimplebitSession(Session):
     USER_PATTERN_PART = r'([\w\d]+)'
     JOIN_PATTERN = re.compile(fr"""^User {USER_PATTERN_PART} joined channel (?:'|")(.+)(?:'|").$""")
@@ -177,17 +178,31 @@ class SimplebitSession(Session):
 
     def __init__(self, channel, user):
         super().__init__(channel, user)
-
-
         self.user_files = {}
         
-        self.provide_dir = '.'
-        self.receive_dir = '.'
+        self.provide_dir = None
+        self.receive_dir = None
+        self.load_settings()
 
         self.usersvar = None
         self.filesvar = None
 
         self.current_selected_user = None
+
+    def load_settings(self):
+        settings = None
+        with open('settings.yml', 'r') as f:
+            settings = yaml.safe_load(f)
+        self.provide_dir = settings['provide_dir']
+        self.receive_dir = settings['receive_dir']
+
+    def save_settings(self):
+        with open('settings.yml', 'w') as f:
+            yaml.dump(
+                {'provide_dir': self.provide_dir,
+                 'receive_dir': self.receive_dir},
+                f,
+                allow_unicode=True)
 
     @property
     def files(self):

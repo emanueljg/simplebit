@@ -2,34 +2,31 @@ from functools import wraps
 
 
 
-# dirty metaclass hack that injects decorator in a 
-class Meta(type):
-	STUFF = {}
+# dirty metaclass hack that injects fundamental decorator functionality
+class ActionRegistrar(type):
+	actions = defaultdict(defaultdict(list))
+
 	@classmethod
 	def __prepare__(metacls, name, bases):
-		#print(name)
-		def deco(arg):
-			def inner_deco(f):
+		def action(arg):
+			def inner_action(f):
 				Meta.STUFF[arg] = f
 				def wrapped(*args, **kwargs):
 					return f(*args, **kwargs)
 				return wrapped
 			return inner_deco
-			#Meta.STUFF.append(inner_deco)
-			#Meta.STUFF.append((inner_deco, wrapped, f))
-
 		
-		return {'deco': deco, 'STUFF': Meta.STUFF}
+		return {'action': action, 'actions': ActionRegistrar.actions}
 
 
-class A(metaclass=Meta):
+class A(metaclass=ActionRegistrar):
 
-	@deco('x')
+	@action('x')
 	def foo(self):
 		print('foo')
 
-	@deco('y')
-	@deco('z')
+	@action('y')
+	@action('z')
 	def bar(self):
 		print('bar')
 
