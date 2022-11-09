@@ -26,11 +26,12 @@ def on_user_select(evt):
         user = w.get(index)
         BS.send_request_files_list(user)
 
-def on_file_select(evt):
+def on_file_double_click(evt):
     w = evt.widget
     if len(cs := w.curselection()) > 0:
         index = int(cs[0])
         file = w.get(index)
+        print(file)
         BS.send_request_file(BS.current_selected_user, file)
 
 usersvar = StringVar()
@@ -40,7 +41,7 @@ userbox.grid(row=2, column=1, padx=(0, 10), sticky='nsw')
 
 filesvar = StringVar()
 filesbox = Listbox(c, listvariable=filesvar)
-filesbox.bind('<<ListboxSelect>>', on_file_select)
+filesbox.bind('<Double-Button-1>', on_file_double_click)
 filesbox.grid(row=2, column=2, sticky='nswe')
 
 BS.usersvar = usersvar
@@ -173,7 +174,7 @@ def show_settings_dialog():
     dlg.protocol("WM_DELETE_WINDOW", dismiss) # intercept close button
     dlg.transient(root)   # dialog window is related to main
     dlg.wait_visibility() # can't grab until window appears, so we wait
-    dlg.grab_set()        # ensure all input goes to our window
+    #dlg.grab_set()        # ensure all input goes to our window
 
 join_menu_button = ttk.Button(menu, text='Connection', command=show_connection_dialog)
 join_menu_button.grid(row=0, column=0, padx=(0, 10))
