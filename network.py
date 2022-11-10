@@ -18,6 +18,11 @@ from collections import defaultdict
 import re
 
 
+def get_default_download_dir():
+    return f"{os.getenv('USERPROFILE')}\\Downloads" \
+             if os.name == 'nt' \
+           else f"{os.getenv('HOME')}/Downloads" 
+
 def get_file_files(dir_path):
     return [f for f in listdir(dir_path) if isfile(join(dir_path, f))] \
            if dir_path != '' else []
@@ -58,19 +63,18 @@ class Session(metaclass=HookRegistrar):
         self.last_connected_at = None
 
     def handler(self, timestamp, user, message):
-        print('---')
-        print(self.last_connected_at)
-        print(timestamp)
-        print(message)
+        # print('---')
+        # print(self.last_connected_at)
+        # print(timestamp)
+        # print(message)
         
         assert self.last_connected_at is not None
-        #if True:
         if timestamp > self.last_connected_at:
             for pattern, priority_dict in self.hooks.items():
                 if (m := pattern.match(message)):
                     for _, funcs in sorted(priority_dict.items()):
                         for func in funcs:
-                            print(m.groups)
+                            # print(m.groups)
                             func(self, m, timestamp, user, message)
 
     def on_token(self, e):
@@ -101,7 +105,6 @@ class Session(metaclass=HookRegistrar):
             user_name = urllib.parse.quote(self.user)
             client = SSEClient(f'{self.SERVER_URL}/api/listen/{channel_name}/' +
                                f'{user_name}/{self.last_message_time}')
-            print(self.last_connected_at is None)
             for msg in client:
                 if self.close_it:
                     client.resp.close()
@@ -196,6 +199,7 @@ class SimplebitSession(Session):
         self.provide_dir = settings['provide_dir']
         self.receive_dir = settings['receive_dir']
 
+
     def save_settings(self):
         with open('settings.yml', 'w') as f:
             yaml.dump(
@@ -256,8 +260,6 @@ class SimplebitSession(Session):
     def accept_files_list(self, m, timestamp, user, message):
         if m.group(1) == self.user:
             self.user_files[user] = json.loads(m.group(2))
-            print(self.user_files[user])
-            print(self.filesvar)
             self.update_files(user)
 
     def send_request_file(self, user, file):
@@ -276,8 +278,11 @@ class SimplebitSession(Session):
     @hook(GIVE_FILE_PATTERN)
     def accept_file(self, m, timestamp, user, message):
         if m.group(1) == self.user:
+            dl_dir = self.receive_dir \
+                       if self.receive_dir != '' \
+                     else get_default_download_dir()
             file_name = 'SB_' + m.group(2)
-            file_path = os.path.join(self.receive_dir, file_name)
+            file_path = os.path.join(dl_dir, file_name)
             data = m.group(3)
             with open(file_path, 'wb') as f:
                 f.write(base64.b64decode(data))
