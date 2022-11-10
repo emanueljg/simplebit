@@ -6,9 +6,6 @@ from network import SimplebitSession
 
 BS = SimplebitSession('', '')
 
-users = []
-
-
 root = Tk()
 root.title('Simplebit')
 root.grid_columnconfigure(0, weight=1)
@@ -31,7 +28,7 @@ def on_file_double_click(evt):
     if len(cs := w.curselection()) > 0:
         index = int(cs[0])
         file = w.get(index)
-        print(file)
+        # print(file)
         BS.send_request_file(BS.current_selected_user, file)
 
 usersvar = StringVar()
@@ -51,11 +48,11 @@ def onselect(evt):
     # Note here that Tkinter passes an event object to onselect()
     w = evt.widget
     if len(cs := w.curselection()) > 0:
-        print(cs)
+        # print(cs)
         index = int(w.curselection()[0])
-        print(index)
+        # print(index)
         value = w.get(index)
-        print(value)
+        # print(value)
 
 menu = ttk.Frame(c) 
 menu.grid(row=1, column=1, columnspan=2, pady=10, sticky='W')
