@@ -281,7 +281,7 @@ class SimplebitSession(Session):
             dl_dir = self.receive_dir \
                        if self.receive_dir != '' \
                      else get_default_download_dir()
-            file_name = 'SB_' + m.group(2)
+            file_name = m.group(2)
             file_path = os.path.join(dl_dir, file_name)
             data = m.group(3)
             with open(file_path, 'wb') as f:
