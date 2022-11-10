@@ -63,10 +63,10 @@ class Session(metaclass=HookRegistrar):
         self.last_connected_at = None
 
     def handler(self, timestamp, user, message):
-        # print('---')
-        # print(self.last_connected_at)
-        # print(timestamp)
-        # print(message)
+        print('---')
+        print(self.last_connected_at)
+        print(timestamp)
+        print(message)
         
         assert self.last_connected_at is not None
         if timestamp > self.last_connected_at:
@@ -199,7 +199,6 @@ class SimplebitSession(Session):
         self.provide_dir = settings['provide_dir']
         self.receive_dir = settings['receive_dir']
 
-
     def save_settings(self):
         with open('settings.yml', 'w') as f:
             yaml.dump(
@@ -267,6 +266,7 @@ class SimplebitSession(Session):
 
     @hook(REQUEST_FILE_PATTERN)
     def send_give_file(self, m, timestamp, user, message):
+        print('got it')
         if m.group(1) == self.user:
             file_name = m.group(2)
             file_path = os.path.join(self.provide_dir, file_name)

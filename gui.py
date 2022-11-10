@@ -23,6 +23,8 @@ def on_user_select(evt):
         user = w.get(index)
         BS.send_request_files_list(user)
 
+dl_label = None  # define later down the line
+
 def on_file_double_click(evt):
     w = evt.widget
     if len(cs := w.curselection()) > 0:
@@ -30,6 +32,9 @@ def on_file_double_click(evt):
         file = w.get(index)
         # print(file)
         BS.send_request_file(BS.current_selected_user, file)
+        dl_label.config(text='downloaded!')
+        dl_label.after(3000, lambda: dl_label.config(text=''))
+
 
 usersvar = StringVar()
 userbox = Listbox(c, listvariable=usersvar)
@@ -177,6 +182,10 @@ join_menu_button = ttk.Button(menu, text='Connection', command=show_connection_d
 join_menu_button.grid(row=0, column=0, padx=(0, 10))
 
 settings_menu_button = ttk.Button(menu, text='Settings', command=show_settings_dialog)
-settings_menu_button.grid(row=0, column=1)
+settings_menu_button.grid(row=0, column=1, padx=(0, 10))
+
+dl_label = ttk.Label(menu, text='')
+dl_label.grid(row=0, column=2)
+
 
 root.mainloop()
