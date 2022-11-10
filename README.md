@@ -13,7 +13,7 @@ A simple python program for file sharing. Inspired by [Soulseek](http://www.slsk
 
 	* The receive directory is where other users' files are downloaded to. Defaults to OS default download directory.
 
-4. Connect to a channel and choose a username in `Connection`.
+4. Connect to a channel and choose a username in *Connection*.
 
 5. Choose a user from the left-hand list you want to download files from.
 
