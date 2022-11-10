@@ -11,7 +11,7 @@ A simple python program for file sharing. Inspired by [Soulseek](http://www.slsk
 3. Set your provide directory and receive directory in *Settings*.
 	* The provide directory is where you put your files that you offer to other users in the channel.
 
-	* The receive directory is where other users' files are downloaded to. Defaults to OS default download directory.
+	* The receive directory is where other users' files are downloaded to. If unset, defaults to OS default download directory.
 
 4. Connect to a channel and choose a username in *Connection*.
 
