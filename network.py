@@ -261,7 +261,6 @@ class SimplebitSession(Session):
 
     @hook(REQUEST_FILE_PATTERN)
     def send_give_file(self, m, timestamp, user, message):
-        print('got it')
         if m.group(1) == self.user:
             file_name = m.group(2)
             file_path = os.path.join(self.provide_dir, file_name)
