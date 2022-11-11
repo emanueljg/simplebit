@@ -30,6 +30,7 @@ def get_file_files(dir_path):
 def ms_since_epoch():
     return time.time_ns() // 1000000
 
+
 # evil metaclass hack that injects decorator functionality
 class HookRegistrar(type):
     # use lambda to make a defaultdict of defaultdict values 
@@ -63,18 +64,11 @@ class Session(metaclass=HookRegistrar):
         self.last_connected_at = None
 
     def handler(self, timestamp, user, message):
-        print('---')
-        print(self.last_connected_at)
-        print(timestamp)
-        print(message)
-        
-        assert self.last_connected_at is not None
         if timestamp > self.last_connected_at:
             for pattern, priority_dict in self.hooks.items():
                 if (m := pattern.match(message)):
                     for _, funcs in sorted(priority_dict.items()):
                         for func in funcs:
-                            # print(m.groups)
                             func(self, m, timestamp, user, message)
 
     def on_token(self, e):
@@ -140,7 +134,6 @@ class Session(metaclass=HookRegistrar):
                 data=json.dumps({'message': message})
             )
         except Exception as e:
-            # we don't handle this yet in gui so just print for now
             print(e)
             return e
 
@@ -149,7 +142,7 @@ class Session(metaclass=HookRegistrar):
         self.send('Bye!')
 
         while self.token:
-            time.sleep(0.01)
+            time.sleep(1)
 
         self.last_connected_at = None
 
@@ -158,13 +151,13 @@ class Session(metaclass=HookRegistrar):
         self.current_selected_user = None
         self.filesvar.set([])
 
-
     def __enter__(self):
         self.connect()
         return self;
 
     def __exit__(self, type, value, traceback):
         self.close()
+
 
 class SimplebitSession(Session):
     USER_PATTERN_PART = r'([\w\d]+)'
@@ -209,7 +202,9 @@ class SimplebitSession(Session):
 
     @property
     def files(self):
-        return get_file_files(self.provide_dir)
+        return [f for f in listdir(self.provide_dir) 
+                  if isfile(join(self.provide_dir, f))] \
+          if self.provide_dir != '' else []
 
     def on_token(self, e):
         super().on_token(e)
@@ -217,15 +212,15 @@ class SimplebitSession(Session):
             self.last_connected_at = ms_since_epoch()
             self.send_ping_all()
 
-    def send_ping_all(self):
-        self.send('PING_ALL')
-
     def update_users(self):
         self.usersvar.set(list(self.user_files.keys()))
 
     def update_files(self, user):
         self.current_selected_user = user
         self.filesvar.set(self.user_files.get(user, []))
+
+    def send_ping_all(self):
+        self.send('PING_ALL')
 
     @hook(PING_ALL_PATTERN)
     def pong(self, m, timestamp, user, message):
